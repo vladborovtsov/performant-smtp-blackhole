@@ -1,0 +1,24 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Run daemon" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+    <option name="command" value="run --package performant-smtp-blackhole --bin performant_smtp_blackhole" />
+    <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+    <option name="emulateTerminal" value="true" />
+    <option name="channel" value="DEFAULT" />
+    <option name="requiredFeatures" value="true" />
+    <option name="allFeatures" value="false" />
+    <option name="withSudo" value="false" />
+    <option name="buildTarget" value="REMOTE" />
+    <option name="backtrace" value="SHORT" />
+    <envs>
+      <env name="CERT_PASSWORD" value="your_password" />
+      <env name="CERT_PATH" value="data/dummy.pfx" />
+      <env name="RUST_LOG" value="performant_smtp_blackhole" />
+      <env name="SMTP_LISTENERS" value="127.0.0.1:2525" />
+    </envs>
+    <option name="isRedirectInput" value="false" />
+    <option name="redirectInputPath" value="" />
+    <method v="2">
+      <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+    </method>
+  </configuration>
+</component>
