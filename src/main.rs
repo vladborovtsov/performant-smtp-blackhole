@@ -75,7 +75,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         for (listener, is_smtps) in &listeners {
             let acceptor = tokio_tls_acceptor.clone();
-            let listener = listener.clone();
             let fut = async move {
                 match listener.accept().await {
                     Ok((socket, _)) => {
