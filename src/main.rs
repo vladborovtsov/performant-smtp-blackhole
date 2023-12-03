@@ -1,34 +1,31 @@
 use native_tls::Identity;
-use std::fs::File;
-use std::io::Error;
-use std::io::Read;
-use std::net::{TcpListener, ToSocketAddrs};
-use std::process::exit;
-use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpListener as TokioTcpListener;
 use tokio_native_tls::TlsAcceptor as TokioTlsAcceptor;
+use std::fs::File;
+use std::io::Read;
+use std::net::ToSocketAddrs;
+use std::process::exit;
+use std::sync::Arc;
+use futures::future::select_all;
+use std::error::Error;
+
 
 fn parse_listeners(listeners: &str) -> Result<Vec<(String, u16)>, Box<dyn std::error::Error>> {
-    listeners
-        .split(',')
+    listeners.split(',')
         .map(|s| {
             s.to_socket_addrs()
                 .map_err(|e| e.into()) // Convert to Box<dyn std::error::Error>
-                .and_then(|mut addrs| {
-                    addrs
-                        .next()
+                .and_then(|mut addrs|
+                    addrs.next()
                         .ok_or_else(|| "Invalid address".into()) // Convert to Box<dyn std::error::Error>
                         .map(|addr| (addr.ip().to_string(), addr.port()))
-                })
+                )
         })
         .collect::<Result<Vec<_>, _>>() // Collect into a Result<Vec<(String, u16)>, Box<dyn std::error::Error>>
 }
 
-async fn handle_client(
-    stream: impl AsyncRead + AsyncWrite + Unpin,
-    is_smtps: bool,
-) -> Result<(), Error> {
+async fn handle_client(stream: impl AsyncRead + AsyncWrite + Unpin, is_smtps: bool) -> Result<(), Box<dyn Error + Send + Sync>> {
     // Your code to handle the client connection goes here.
     // For example, you might read from or write to the stream.
 
@@ -56,12 +53,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for addr in smtp_addrs {
         let listener = TokioTcpListener::bind(addr).await?;
-        listeners.push((listener, false)); // false for SMTP
+        listeners.push((listener, false));  // false for SMTP
     }
 
     for addr in smtps_addrs {
         let listener = TokioTcpListener::bind(addr).await?;
-        listeners.push((listener, true)); // true for SMTPS
+        listeners.push((listener, true));  // true for SMTPS
     }
 
     if listeners.is_empty() {
@@ -69,34 +66,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         exit(1);
     }
 
+
     let tls_acceptor = native_tls::TlsAcceptor::builder(identity).build()?;
     let tokio_tls_acceptor = Arc::new(TokioTlsAcceptor::from(tls_acceptor));
 
-    loop {
-        for (listener, is_smtps) in &listeners {
-            let acceptor = tokio_tls_acceptor.clone();
-            let fut = async move {
-                match listener.accept().await {
-                    Ok((socket, _)) => {
-                        if *is_smtps {
-                            let secure_socket = match acceptor.accept(socket).await {
-                                Ok(s) => s,
-                                Err(e) => return Err(e.to_string()),
-                            };
-                            match handle_client(secure_socket, true).await {
-                                Ok(_) => Ok(()),
-                                Err(e) => return Err(e.to_string()),
-                            }
-                        } else {
-                            match handle_client(socket, false).await {
-                                Ok(_) => Ok(()),
-                                Err(e) => return Err(e.to_string()),
-                            }
-                        }
+    let mut futures = Vec::new();
+
+    for (listener, is_smtps) in &listeners {
+        let acceptor = tokio_tls_acceptor.clone();
+        let fut = Box::pin(async move {
+            match listener.accept().await {
+                Ok((socket, _)) => {
+                    if *is_smtps {
+                        let secure_socket = match acceptor.accept(socket).await {
+                            Ok(s) => s,
+                            Err(e) => return Err(Box::new(e) as Box<dyn Error + Send + Sync>),
+                        };
+                        handle_client(secure_socket, true).await
+                    } else {
+                        handle_client(socket, false).await
                     }
-                    Err(e) => return Err(e.to_string()),
-                }
-            };
+                },
+                Err(e) => Err(Box::new(e) as Box<dyn Error + Send + Sync>),
+            }
+        });
+        futures.push(fut);
+    }
+
+
+
+    loop {
+        if !futures.is_empty() {
+            let (result, _index, remaining_futures) = select_all(futures).await;
+            // Handle the result of the future here (e.g., log error)
+            futures = remaining_futures;
+        } else {
+            break; // Exit loop if no futures are left
         }
     }
+
+    Ok(())
 }
