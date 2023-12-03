@@ -18,7 +18,7 @@ openssl genrsa -out "$KEY_FILE" 2048
 openssl req -new -x509 -key "$KEY_FILE" -out "$CERT_FILE" -days 365 -subj "/C=US/ST=Dummy/L=Dummy/O=Dummy/CN=localhost"
 
 # Generate a PKCS#12 file
-openssl pkcs12 -export -out "$PFX_FILE" -inkey "$KEY_FILE" -in "$CERT_FILE" -passout pass:$PASSWORD
+openssl pkcs12 -export -legacy -out "$PFX_FILE" -inkey "$KEY_FILE" -in "$CERT_FILE" -passout pass:$PASSWORD #legacy arg is needed as there is something wrong with openssl v3.x
 
 # Clean up - Remove key and cert files if you don't need them
 rm "$KEY_FILE" "$CERT_FILE"
