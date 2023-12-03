@@ -16,6 +16,7 @@ Additionally, I'm looking to learn more about the Rust language through this pro
 ## Configuration
 The application uses two environment variables to configure the listening ports:
 
+- `RUST_LOG`: `performant_smtp_blackhole`, for extra instructions consult [env_logger crate documentation](https://docs.rs/env_logger/latest/env_logger/)
 - `SMTP_LISTENERS`: Comma-separated list of addresses and ports for SMTP (e.g., `127.0.0.1:25,127.0.0.1:587`).
 - `SMTPS_LISTENERS`: Comma-separated list of addresses and ports for SMTPS (e.g., `0.0.0.0:465`).
 - Optional: `CERT_PATH` and `CERT_PASSWORD`: required for SMTPS listeners. Dummy self-signed cert could be generated using `generate_dummy_ssl_cert.sh` from scripts folder.

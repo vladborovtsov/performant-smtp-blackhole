@@ -9,6 +9,8 @@ use std::process::exit;
 use std::sync::Arc;
 use futures::future::select_all;
 use std::error::Error;
+use log::{debug, error, info};
+
 
 
 fn parse_listeners(listeners: Option<&str>) -> Result<Vec<(String, u16)>, Box<dyn std::error::Error>> {
@@ -43,11 +45,13 @@ async fn handle_client(stream: impl AsyncRead + AsyncWrite + Unpin, is_smtps: bo
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    env_logger::init();
+
     let smtp_listeners_str = std::env::var("SMTP_LISTENERS").ok();
     let smtps_listeners_str = std::env::var("SMTPS_LISTENERS").ok();
 
-    eprintln!("Test:{}", smtp_listeners_str.clone().unwrap_or_default().to_string());
-    eprintln!("Test:{}", smtps_listeners_str.clone().unwrap_or_default().to_string());
+    debug!("SMTP_LISTENERS string:{}", smtp_listeners_str.clone().unwrap_or_default().to_string());
+    debug!("SMTPS_LISTENERS string:{}", smtps_listeners_str.clone().unwrap_or_default().to_string());
 
     let smtp_addrs = parse_listeners(smtp_listeners_str.as_deref())?;
     let smtps_addrs = parse_listeners(smtps_listeners_str.as_deref())?;
@@ -68,7 +72,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 
     for addr in smtp_addrs {
-        let listener = TokioTcpListener::bind(addr).await?;
+        let listener = TokioTcpListener::bind(addr.clone()).await?;
+        info!("Listening at {:?}", addr);
         listeners.push((listener, false));  // false for SMTP
     }
 
@@ -78,7 +83,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if listeners.is_empty() {
-        eprintln!("Error: No SMTP or SMTPS listeners defined.");
+        error!("Error: No SMTP or SMTPS listeners defined.");
         exit(1);
     }
 
