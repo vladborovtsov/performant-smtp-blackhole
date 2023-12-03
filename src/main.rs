@@ -1,30 +1,34 @@
 use native_tls::Identity;
-use tokio_native_tls::TlsAcceptor as TokioTlsAcceptor;
 use std::fs::File;
+use std::io::Error;
 use std::io::Read;
-use tokio::io::{AsyncRead, AsyncWrite};
 use std::net::{TcpListener, ToSocketAddrs};
 use std::process::exit;
-use tokio::net::TcpListener as TokioTcpListener;
 use std::sync::Arc;
-use std::io::Error;
-
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::net::TcpListener as TokioTcpListener;
+use tokio_native_tls::TlsAcceptor as TokioTlsAcceptor;
 
 fn parse_listeners(listeners: &str) -> Result<Vec<(String, u16)>, Box<dyn std::error::Error>> {
-    listeners.split(',')
+    listeners
+        .split(',')
         .map(|s| {
             s.to_socket_addrs()
                 .map_err(|e| e.into()) // Convert to Box<dyn std::error::Error>
-                .and_then(|mut addrs|
-                    addrs.next()
+                .and_then(|mut addrs| {
+                    addrs
+                        .next()
                         .ok_or_else(|| "Invalid address".into()) // Convert to Box<dyn std::error::Error>
                         .map(|addr| (addr.ip().to_string(), addr.port()))
-                )
+                })
         })
         .collect::<Result<Vec<_>, _>>() // Collect into a Result<Vec<(String, u16)>, Box<dyn std::error::Error>>
 }
 
-async fn handle_client(stream: impl AsyncRead + AsyncWrite + Unpin, is_smtps: bool) -> Result<(), Error> {
+async fn handle_client(
+    stream: impl AsyncRead + AsyncWrite + Unpin,
+    is_smtps: bool,
+) -> Result<(), Error> {
     // Your code to handle the client connection goes here.
     // For example, you might read from or write to the stream.
 
@@ -52,12 +56,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for addr in smtp_addrs {
         let listener = TokioTcpListener::bind(addr).await?;
-        listeners.push((listener, false));  // false for SMTP
+        listeners.push((listener, false)); // false for SMTP
     }
 
     for addr in smtps_addrs {
         let listener = TokioTcpListener::bind(addr).await?;
-        listeners.push((listener, true));  // true for SMTPS
+        listeners.push((listener, true)); // true for SMTPS
     }
 
     if listeners.is_empty() {
@@ -65,31 +69,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         exit(1);
     }
 
-
     let tls_acceptor = native_tls::TlsAcceptor::builder(identity).build()?;
     let tokio_tls_acceptor = Arc::new(TokioTlsAcceptor::from(tls_acceptor));
 
     loop {
         for (listener, is_smtps) in &listeners {
             let acceptor = tokio_tls_acceptor.clone();
-            let listener = listener.clone();
             let fut = async move {
                 match listener.accept().await {
                     Ok((socket, _)) => {
                         if *is_smtps {
                             let secure_socket = match acceptor.accept(socket).await {
                                 Ok(s) => s,
-                                Err(e) => return Err(e.into()), // Convert to a common error type
+                                Err(e) => return Err(e.to_string()),
                             };
-                            handle_client(secure_socket, true).await.map_err(|e| e.into())
+                            match handle_client(secure_socket, true).await {
+                                Ok(_) => Ok(()),
+                                Err(e) => return Err(e.to_string()),
+                            }
                         } else {
-                            handle_client(socket, false).await.map_err(|e| e.into())
+                            match handle_client(socket, false).await {
+                                Ok(_) => Ok(()),
+                                Err(e) => return Err(e.to_string()),
+                            }
                         }
-                    },
-                    Err(e) => Err(e.into()), // Convert to a common error type
+                    }
+                    Err(e) => return Err(e.to_string()),
                 }
             };
-
         }
     }
 }
